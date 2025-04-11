@@ -11,9 +11,9 @@ The renderer splits the calculation work between multiple worker threads and use
 
 ## Example fractals
 
-![1](examples/1.bmp)
-![2](examples/2.bmp)
-![3](examples/3.bmp)
+![1](examples/1.png)
+![2](examples/2.png)
+![3](examples/3.png)
 
 ---
 

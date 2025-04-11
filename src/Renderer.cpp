@@ -243,6 +243,7 @@ void Renderer::computeScalarPixel(int x, int y, float cy) {
         zx = temp;
 
         if (zx2 + zy2 >= Parameters::ESCAPE_RADIUS_SQ) break;
+
     }
 
     int idx = y * Parameters::WIDTH + x;
