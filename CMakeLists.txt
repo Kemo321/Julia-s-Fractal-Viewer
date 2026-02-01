@@ -34,7 +34,7 @@ set(SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Link against SDL2
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2::SDL2main)
 
 # Include directories for project and xsimd
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -47,4 +47,12 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
   target_compile_options(${PROJECT_NAME} PRIVATE -msse4.2)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
   target_compile_options(${PROJECT_NAME} PRIVATE -march=armv8-a+simd)
+endif()
+
+if(WIN32)
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:SDL2::SDL2>
+      $<TARGET_FILE_DIR:${PROJECT_NAME}>
+  )
 endif()
