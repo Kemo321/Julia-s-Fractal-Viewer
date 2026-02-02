@@ -1,0 +1,62 @@
+name: JFV CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  format-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: |
+          sudo apt update --yes
+          sudo apt install --yes clang-format
+      - name: Run clang-format
+        run: |
+          clang-format -style=file -i --dry-run --Werror $(find . \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" -o -name "*.hxx" -o -name "*.inl" \) -not -path "*/build*/*")
+
+  build-gcc14:
+    runs-on: ubuntu-22.04
+    container: gcc:14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          apt update --yes
+          apt install --yes cmake clang-tidy
+      - name: Build
+        run: |
+          mkdir build-gcc14
+          cd build-gcc14
+          cmake ../
+          make
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-gcc14
+          path: build-gcc14/
+
+  build-gcc15:
+    runs-on: ubuntu-22.04
+    container: gcc:15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          apt update --yes
+          apt install --yes cmake clang-tidy
+      - name: Build
+        run: |
+          mkdir build-gcc15
+          cd build-gcc15
+          cmake ../
+          make
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-gcc15
+          path: build-gcc15/
