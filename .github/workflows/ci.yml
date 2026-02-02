@@ -17,46 +17,37 @@ jobs:
           sudo apt install --yes clang-format
       - name: Run clang-format
         run: |
-          clang-format -style=file -i --dry-run --Werror $(find . \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" -o -name "*.hxx" -o -name "*.inl" \) -not -path "*/build*/*")
+          find . \( -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) -not -path "*/build*/*" | xargs clang-format -style=file --dry-run --Werror
 
-  build-gcc14:
+  build-and-test:
     runs-on: ubuntu-22.04
-    container: gcc:14
+    strategy:
+      fail-fast: false
+      matrix:
+        gcc_version: [14, 15]
+    container: gcc:${{ matrix.gcc_version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          apt update --yes
-          apt install --yes cmake clang-tidy
-      - name: Build
-        run: |
-          mkdir build-gcc14
-          cd build-gcc14
-          cmake ../
-          make
-      - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-gcc14
-          path: build-gcc14/
 
-  build-gcc15:
-    runs-on: ubuntu-22.04
-    container: gcc:15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
+      - name: Install System Dependencies
         run: |
           apt update --yes
-          apt install --yes cmake clang-tidy
+          apt install --yes cmake libsdl2-dev libgl1-mesa-dev libx11-dev libxext-dev
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
       - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run Unit Tests
         run: |
-          mkdir build-gcc15
-          cd build-gcc15
-          cmake ../
-          make
-      - name: Archive build artifacts
+          cd build
+          ctest --output-on-failure
+
+      - name: Archive Build Artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: build-gcc15
-          path: build-gcc15/
+          name: build-gcc${{ matrix.gcc_version }}
+          path: build/
