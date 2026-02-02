@@ -1,9 +1,10 @@
 #pragma once
-#include <SDL2/SDL.h>
-#include "Renderer.hpp"
 #include "Parameters.hpp"
+#include "Renderer.hpp"
+#include <SDL2/SDL.h>
 
-class Window {
+class Window
+{
     SDL_Window* window;
     Renderer* renderer;
     SDL_Event event;
