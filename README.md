@@ -51,10 +51,11 @@ The renderer splits the calculation work between multiple worker threads and use
 
 ## Prerequisites
 
-- **SDL2:** The project uses the SDL2 library for window creation, input handling, and 2D rendering.
-- **xsimd:** The SIMD vectorization library ([xsimd GitHub repository](https://github.com/xtensor-stack/xsimd)).
-- **C++17:** The code requires a C++17-compliant compiler.
-- **Threads & Standard Library:** Utilizes the C++ standard library threading features (`<thread>`, `<mutex>`, `<condition_variable>`, etc.).
+* **SDL2:** The project uses the SDL2 library for window creation, input handling, and 2D rendering.
+* **xsimd:** A high-level C++ wrapper for SIMD intrinsic functions used for vectorized fractal computations.
+* **C++23:** The code requires a C++23-compliant compiler (e.g., GCC 14+, MSVC 19.38+, or Clang 17+) to support modern features like `std::barrier`.
+* **Threads & Standard Library:** Utilizes advanced C++ standard library threading and synchronization primitives, including `<thread>`, `<barrier>`, and `<atomic>`.
+* **CMake 3.28+:** Required for modern `FetchContent` features and dependency management.
 
 ---
 
@@ -84,7 +85,8 @@ Run the compiled executable (e.g., `julia_renderer`). Controls inside the render
 - **Julia Set Constant Adjustments:**
   - **W / S:** Increase / decrease the imaginary part (`C_IMAG`).
   - **A / D:** Decrease / increase the real part (`C_REAL`).
-- **Regenerate Gradient:** Press **R** to generate a new color gradient.
+  - **R**: Reset `C_REAL` and `C_IMAG` to default values.
+- **Regenerate Gradient:** Press **G** to generate a new color gradient.
 - **Save Screenshot:** Press **F** to save a screenshot as a BMP file (filename based on the current time).
 - **Escape:** Press **ESC** to exit the application.
 
@@ -117,36 +119,57 @@ namespace Parameters {
 
 ### Renderer
 
+---
+
+### Renderer
+
 #### Core Methods
 
-- **Constructor & Destructor:**  
-  The `Renderer` constructor initializes the SDL renderer and texture, allocates a flat pixel buffer, and spawns worker threads according to the number of available hardware cores. The destructor ensures all threads are joined and SDL resources are destroyed.
+* **Constructor & Destructor:**
+* The `Renderer` constructor initializes the SDL renderer and texture, allocates a pixel buffer, and spawns worker threads according to the number of hardware cores.
+* The destructor signals threads to stop, arrives at the barrier to release waiting workers, and joins all threads before destroying SDL resources.
 
-- **init():**  
-  Creates the SDL_Renderer and SDL_Texture, then calls `generateGradient()` to populate the color lookup table.
 
-- **drawFractal():**  
-  Breaks the screen vertically into chunks, enqueues tasks for worker threads, waits for their completion (using condition variables for synchronization), updates the texture with the pixel buffer, and renders it using SDL.
+* **init():**
+* Creates the `SDL_Renderer` and `SDL_Texture` with streaming access for efficient pixel updates, then generates the initial color lookup table.
 
-- **saveScreenshot():**  
-  Captures the current pixel buffer to an SDL_Surface and saves it as a BMP file with a timestamped filename.
+
+* **render():**
+* Coordinates the frame generation by using a two-stage barrier synchronization: first to start the parallel computation and second to ensure all threads have finished before updating the texture and presenting the frame.
+
+
+* **saveScreenshot():**
+* Captures the current pixel buffer to an `SDL_Surface` and saves it as a BMP file with a timestamped filename.
+
+
 
 #### Multi-threading and Synchronization
 
-- **Worker Threads:**  
-  Each worker thread waits (using a condition variable) for tasks to become available from a shared queue. Once a task is dequeued, the thread computes the fractal for its chunk (i.e., a horizontal slice) and increments the `tasksCompleted` count.
+* **Worker Threads:**
+* Worker threads run in a continuous loop, waiting on a `std::barrier` for a new frame signal.
+* Once released, each thread computes a specific horizontal slice (chunk) of the fractal and waits at the barrier again for the main thread to complete the rendering cycle.
 
-- **Condition Variables:**  
-  Synchronization is managed with a condition variable, avoiding spin-loops. The main thread waits until all tasks are processed before updating the texture and rendering.
+
+* **std::barrier (C++23):**
+* Synchronization is managed via `std::barrier`, replacing manual condition variables to coordinate the main thread and worker threads with minimal overhead.
+* This ensures that the pixel buffer is never updated while the GPU is reading from it and that no thread starts a new frame before the previous one is displayed.
+
+
 
 #### SIMD Computation
 
-- **computeSIMDIterations():**  
-  Uses xsimd to vectorize the iterative fractal computation across multiple pixels in parallel. It includes an early exit if all lanes (vector elements) have met the escape condition.
-  
-- **computeSIMDChunk():**  
-  Prepares coordinate data in a stack-allocated array and performs vectorized computations, storing the results into the pixel buffer.
-  
+* **computeSIMDIterations():**
+* Uses `xsimd` to vectorize the complex number math, processing multiple pixels per lane (e.g., 8 pixels for AVX2).
+* Features an early-exit optimization that stops the iteration loop as soon as all pixels in the current SIMD batch have escaped the radius.
+
+
+* **computeSIMDChunk():**
+* Loads aligned coordinate data into SIMD registers and performs the vectorized fractal logic before storing the resulting iteration counts back to the aligned pixel buffer.
+
+
+
+---
+
 - **computeScalarPixel():**  
   A fallback scalar method for computing pixels when SIMD is not applicable.
 
