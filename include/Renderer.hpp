@@ -55,4 +55,6 @@ private:
         const xsimd::simd_type<float>& four,
         const xsimd::simd_type<float>& max_iter,
         const xsimd::simd_type<float>& two) const;
+
+    friend class RendererTest;
 };
