@@ -8,30 +8,26 @@ using floatv = xs::simd_type<float>;
 // Constructor initializes using Parameters.hpp
 Renderer::Renderer(SDL_Window* window)
     : window(window), renderer(nullptr), texture(nullptr),
-      scaleX(2.0f * 4 / (Parameters::WIDTH * Parameters::ZOOM)),
-      scaleY(2.0f * 4 / (Parameters::HEIGHT * Parameters::ZOOM)),
-      stop(false), tasksAvailable(false), tasksCompleted(0) {
+      scale_x(2.0f * 4 / (Parameters::WIDTH * Parameters::ZOOM)),
+      scale_y(2.0f * 4 / (Parameters::HEIGHT * Parameters::ZOOM)),
+      stop(false), tasks_available(false), tasks_completed(0) {
     std::cout << "Renderer constructor started\n";
 
-    // Check if the window is valid
     if (!window) {
         std::cerr << "Error: Null window passed to Renderer\n";
         throw std::runtime_error("Null window");
     }
 
-    // Allocate pixel buffer
-    pixelBuffer.resize(Parameters::WIDTH * Parameters::HEIGHT, 0);
+    pixel_buffer.resize(Parameters::WIDTH * Parameters::HEIGHT, 0);
     std::cout << "Pixel buffer allocated\n";
 
-    // Initialize SDL renderer and texture
     init();
     std::cout << "Renderer initialized\n";
 
-    // Start worker threads
-    const int numThreads = std::thread::hardware_concurrency();
-    std::cout << "Starting " << numThreads << " worker threads\n";
-    for (int i = 0; i < numThreads; ++i) {
-        workers.emplace_back(&Renderer::workerThread, this);
+    const int num_threads = std::thread::hardware_concurrency();
+    std::cout << "Starting " << num_threads << " worker threads\n";
+    for (int i = 0; i < num_threads; ++i) {
+        workers.emplace_back(&Renderer::worker_thread, this);
     }
     std::cout << "Renderer constructor completed\n";
 }
@@ -39,26 +35,22 @@ Renderer::Renderer(SDL_Window* window)
 Renderer::~Renderer() {
     std::cout << "Renderer destructor started\n";
 
-    // Signal worker threads to stop
     {
-        std::lock_guard<std::mutex> lock(queueMutex);
+        std::lock_guard<std::mutex> lock(queue_mutex);
         stop = true;
     }
     condition.notify_all();
 
-    // Join all worker threads
     for (auto& worker : workers) {
         if (worker.joinable()) worker.join();
     }
 
-    // Destroy SDL resources
     if (texture) SDL_DestroyTexture(texture);
     if (renderer) SDL_DestroyRenderer(renderer);
 
     std::cout << "Renderer destructor completed\n";
 }
 
-// Initialize SDL renderer and texture
 void Renderer::init() {
     std::cout << "Initializing renderer\n";
 
@@ -78,133 +70,121 @@ void Renderer::init() {
         throw std::runtime_error("Failed to create SDL texture");
     }
 
-    // Generate color gradient
-    generateGradient();
+    generate_gradient();
     std::cout << "Renderer initialization completed\n";
 }
 
-// Draw the fractal
-void Renderer::drawFractal() {
-    const int numThreads = workers.size();
-    const int chunkSize = Parameters::HEIGHT / numThreads;
-    tasksCompleted = 0;
+void Renderer::draw_fractal() {
+    const int num_threads = workers.size();
+    const int chunk_size = Parameters::HEIGHT / num_threads;
+    tasks_completed = 0;
 
-    // Prepare tasks for worker threads
     {
-        std::lock_guard<std::mutex> lock(queueMutex);
+        std::lock_guard<std::mutex> lock(queue_mutex);
         while (!tasks.empty()) tasks.pop();
-        for (int i = 0; i < numThreads; ++i) {
-            int startY = i * chunkSize;
-            int endY = (i == numThreads - 1) ? Parameters::HEIGHT : startY + chunkSize;
-            tasks.push({startY, endY});
+        for (int i = 0; i < num_threads; ++i) {
+            int start_y = i * chunk_size;
+            int end_y = (i == num_threads - 1) ? Parameters::HEIGHT : start_y + chunk_size;
+            tasks.push({start_y, end_y});
         }
-        tasksAvailable = true;
+        tasks_available = true;
     }
     condition.notify_all();
 
-    // Wait for all tasks to complete
-    std::unique_lock<std::mutex> lock(queueMutex);
-    condition.wait(lock, [this, numThreads] { return tasksCompleted >= numThreads; });
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    condition.wait(lock, [this, num_threads] { return tasks_completed >= num_threads; });
 
-    // Update texture and render
-    SDL_UpdateTexture(texture, nullptr, pixelBuffer.data(), Parameters::WIDTH * sizeof(Uint32));
+    SDL_UpdateTexture(texture, nullptr, pixel_buffer.data(), Parameters::WIDTH * sizeof(Uint32));
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
     SDL_RenderPresent(renderer);
 }
 
-// Worker thread function
-void Renderer::workerThread() {
+void Renderer::worker_thread() {
     while (!stop) {
         Task task;
 
-        // Wait for tasks or stop signal
         {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            condition.wait(lock, [this] { return stop || (!tasks.empty() && tasksAvailable); });
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            condition.wait(lock, [this] { return stop || (!tasks.empty() && tasks_available); });
             if (stop && tasks.empty()) return;
 
             if (!tasks.empty()) {
                 task = tasks.front();
                 tasks.pop();
-                if (tasks.empty()) tasksAvailable = false;
+                if (tasks.empty()) tasks_available = false;
                 lock.unlock();
 
-                // Compute the fractal chunk
-                computeFractalChunk(task.startY, task.endY);
-                tasksCompleted++;
+                compute_fractal_chunk(task.start_y, task.end_y);
+                tasks_completed++;
                 condition.notify_all();
             }
         }
     }
 }
 
-// Compute a chunk of the fractal
-void Renderer::computeFractalChunk(int startY, int endY) {
+void Renderer::compute_fractal_chunk(int start_y, int end_y) {
     using floatv = xs::simd_type<float>;
-    const int vecSize = floatv::size;
+    const int vec_size = floatv::size;
 
-    floatv cRe, cIm, four, two, maxIter;
+    floatv c_re, c_im, four, two, max_iter;
     float cy;
 
-    for (int y = startY; y < endY; ++y) {
-        setupConstants(cy, y, cRe, cIm, four, two, maxIter);
+    for (int y = start_y; y < end_y; ++y) {
+        setup_constants(cy, y, c_re, c_im, four, two, max_iter);
 
         int x = 0;
-        for (; x <= Parameters::WIDTH - vecSize; x += vecSize) {
-            computeSIMDChunk(x, y, cRe, cIm, four, two, maxIter, cy);
+        for (; x <= Parameters::WIDTH - vec_size; x += vec_size) {
+            compute_simd_chunk(x, y, c_re, c_im, four, two, max_iter, cy);
         }
     }
 }
 
-// Setup constants for SIMD computation
-void Renderer::setupConstants(float& cy, int y, floatv& cRe, floatv& cIm,
-                              floatv& four, floatv& two, floatv& maxIter) const {
-    cy = (static_cast<float>(y) - Parameters::CENTER_Y) * scaleY;
-    cRe = xs::broadcast<float>(Parameters::C_REAL);
-    cIm = xs::broadcast<float>(Parameters::C_IMAG);
+void Renderer::setup_constants(float& cy, int y, floatv& c_re, floatv& c_im,
+                               floatv& four, floatv& two, floatv& max_iter) const {
+    cy = (static_cast<float>(y) - Parameters::CENTER_Y) * scale_y;
+    c_re = xs::broadcast<float>(Parameters::C_REAL);
+    c_im = xs::broadcast<float>(Parameters::C_IMAG);
     four = xs::broadcast<float>(Parameters::ESCAPE_RADIUS_SQ);
     two = xs::broadcast<float>(Parameters::TWO_MULTIPLIER);
-    maxIter = xs::broadcast<float>(static_cast<float>(Parameters::MAX_ITERATIONS));
+    max_iter = xs::broadcast<float>(static_cast<float>(Parameters::MAX_ITERATIONS));
 }
 
-// Compute a chunk of the fractal using SIMD
-void Renderer::computeSIMDChunk(int x, int y, const floatv& cRe, const floatv& cIm,
-                                const floatv& four, const floatv& two, const floatv& maxIter,
-                                float cy) {
-    const int vecSize = floatv::size;
+void Renderer::compute_simd_chunk(int x, int y, const floatv& c_re, const floatv& c_im,
+                                  const floatv& four, const floatv& two, const floatv& max_iter,
+                                  float cy) {
+    const int vec_size = floatv::size;
 
-    std::array<float, vecSize> xCoords;
-    for (int i = 0; i < vecSize; ++i) {
-        xCoords[i] = static_cast<float>(x + i);
+    std::array<float, vec_size> x_coords;
+    for (int i = 0; i < vec_size; ++i) {
+        x_coords[i] = static_cast<float>(x + i);
     }
 
-    floatv xVec = xs::load_aligned(xCoords.data());
-    floatv zx = (xVec - floatv(Parameters::CENTER_X)) * floatv(scaleX);
+    floatv x_vec = xs::load_aligned(x_coords.data());
+    floatv zx = (x_vec - floatv(Parameters::CENTER_X)) * floatv(scale_x);
     floatv zy = xs::broadcast<float>(cy);
 
-    floatv iterations = computeSIMDIterations(zx, zy, cRe, cIm, four, maxIter, two);
+    floatv iterations = compute_simd_iterations(zx, zy, c_re, c_im, four, max_iter, two);
 
-    std::array<float, vecSize> iterArray;
-    std::array<float, vecSize> zxArray;
-    std::array<float, vecSize> zyArray;
-    iterations.store_unaligned(iterArray.data());
-    zx.store_unaligned(zxArray.data());
-    zy.store_unaligned(zyArray.data());
+    std::array<float, vec_size> iter_array;
+    std::array<float, vec_size> zx_array;
+    std::array<float, vec_size> zy_array;
+    iterations.store_unaligned(iter_array.data());
+    zx.store_unaligned(zx_array.data());
+    zy.store_unaligned(zy_array.data());
 
-    for (int i = 0; i < vecSize; ++i) {
+    for (int i = 0; i < vec_size; ++i) {
         int idx = y * Parameters::WIDTH + x + i;
-        pixelBuffer[idx] = colors[std::min(static_cast<int>(iterArray[i]), static_cast<int>(colors.size()) - 1)];
+        pixel_buffer[idx] = colors[std::min(static_cast<int>(iter_array[i]), static_cast<int>(colors.size()) - 1)];
     }
 }
 
-// Compute iterations for SIMD vectors
-xsimd::batch<float, xsimd::default_arch> Renderer::computeSIMDIterations(
+xsimd::batch<float, xsimd::default_arch> Renderer::compute_simd_iterations(
     xsimd::batch<float, xsimd::default_arch>& zx,
     xsimd::batch<float, xsimd::default_arch>& zy,
-    const xsimd::batch<float, xsimd::default_arch>& cRe,
-    const xsimd::batch<float, xsimd::default_arch>& cIm,
+    const xsimd::batch<float, xsimd::default_arch>& c_re,
+    const xsimd::batch<float, xsimd::default_arch>& c_im,
     const xsimd::batch<float, xsimd::default_arch>& four,
-    const xsimd::batch<float, xsimd::default_arch>& maxIter,
+    const xsimd::batch<float, xsimd::default_arch>& max_iter,
     const xsimd::batch<float, xsimd::default_arch>& two) const {
     auto iterations = xsimd::batch<float, xsimd::default_arch>(0.0f);
 
@@ -212,14 +192,14 @@ xsimd::batch<float, xsimd::default_arch> Renderer::computeSIMDIterations(
         auto zx2 = zx * zx;
         auto zy2 = zy * zy;
         auto mag2 = zx2 + zy2;
-        auto mask = (mag2 < four) & (iterations < maxIter);
+        auto mask = (mag2 < four) & (iterations < max_iter);
 
         if (xsimd::all(!(mask))) {
             break;
         }
 
-        auto temp = zx2 - zy2 + cRe;
-        zy = two * zx * zy + cIm;
+        auto temp = zx2 - zy2 + c_re;
+        zy = two * zx * zy + c_im;
         zx = temp;
         iterations = iterations + xsimd::select(mask, xsimd::batch<float, xsimd::default_arch>(1.0f),
                                                      xsimd::batch<float, xsimd::default_arch>(0.0f));
@@ -227,9 +207,8 @@ xsimd::batch<float, xsimd::default_arch> Renderer::computeSIMDIterations(
     return iterations;
 }
 
-// Compute a single pixel using scalar computation
-void Renderer::computeScalarPixel(int x, int y, float cy) {
-    float zx = (static_cast<float>(x) - Parameters::CENTER_X) * scaleX;
+void Renderer::compute_scalar_pixel(int x, int y, float cy) {
+    float zx = (static_cast<float>(x) - Parameters::CENTER_X) * scale_x;
     float zy = cy;
     const float two = Parameters::TWO_MULTIPLIER;
     int iter = 0;
@@ -243,66 +222,58 @@ void Renderer::computeScalarPixel(int x, int y, float cy) {
         zx = temp;
 
         if (zx2 + zy2 >= Parameters::ESCAPE_RADIUS_SQ) break;
-
     }
 
     int idx = y * Parameters::WIDTH + x;
-    pixelBuffer[idx] = colors[std::min(iter, static_cast<int>(colors.size()) - 1)];
+    pixel_buffer[idx] = colors[std::min(iter, static_cast<int>(colors.size()) - 1)];
 }
 
-// Generate a color gradient
-void Renderer::generateGradient() {
-    const int gradientSteps = 256;
-    std::vector<Uint32> randomColors(10);
+void Renderer::generate_gradient() {
+    const int gradient_steps = 256;
+    std::vector<Uint32> random_colors(10);
 
-    // Generate 10 random colors
     for (int i = 0; i < 10; ++i) {
         int r = rand() % 256;
         int g = rand() % 256;
         int b = rand() % 256;
-        randomColors[i] = (r << 16) | (g << 8) | b;
+        random_colors[i] = (r << 16) | (g << 8) | b;
     }
 
-    // Create a gradient by interpolating between the random colors
-    colors.resize(gradientSteps);
-    int segmentLength = gradientSteps / (randomColors.size() - 1);
+    colors.resize(gradient_steps);
+    int segment_length = gradient_steps / (random_colors.size() - 1);
 
-    for (size_t i = 0; i < randomColors.size() - 1; ++i) {
-        Uint32 startColor = randomColors[i];
-        Uint32 endColor = randomColors[i + 1];
+    for (size_t i = 0; i < random_colors.size() - 1; ++i) {
+        Uint32 start_color = random_colors[i];
+        Uint32 end_color = random_colors[i + 1];
 
-        int startR = (startColor >> 16) & 0xFF;
-        int startG = (startColor >> 8) & 0xFF;
-        int startB = startColor & 0xFF;
+        int start_r = (start_color >> 16) & 0xFF;
+        int start_g = (start_color >> 8) & 0xFF;
+        int start_b = start_color & 0xFF;
 
-        int endR = (endColor >> 16) & 0xFF;
-        int endG = (endColor >> 8) & 0xFF;
-        int endB = endColor & 0xFF;
+        int end_r = (end_color >> 16) & 0xFF;
+        int end_g = (end_color >> 8) & 0xFF;
+        int end_b = end_color & 0xFF;
 
-        for (int j = 0; j < segmentLength; ++j) {
-            float t = static_cast<float>(j) / segmentLength;
-            int r = static_cast<int>(startR + t * (endR - startR));
-            int g = static_cast<int>(startG + t * (endG - startG));
-            int b = static_cast<int>(startB + t * (endB - startB));
-            colors[i * segmentLength + j] = (r << 16) | (g << 8) | b;
+        for (int j = 0; j < segment_length; ++j) {
+            float t = static_cast<float>(j) / segment_length;
+            int r = static_cast<int>(start_r + t * (end_r - start_r));
+            int g = static_cast<int>(start_g + t * (end_g - start_g));
+            int b = static_cast<int>(start_b + t * (end_b - start_b));
+            colors[i * segment_length + j] = (r << 16) | (g << 8) | b;
         }
     }
 
-    // Handle the last color to ensure the gradient fills completely
-    colors[gradientSteps - 1] = randomColors.back();
+    colors[gradient_steps - 1] = random_colors.back();
 }
 
-// Save a screenshot to a file
-void Renderer::saveScreenshot() {
-    
-    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(pixelBuffer.data(), Parameters::WIDTH, Parameters::HEIGHT,
+void Renderer::save_screenshot() {
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(pixel_buffer.data(), Parameters::WIDTH, Parameters::HEIGHT,
     32, Parameters::WIDTH * sizeof(Uint32), SDL_PIXELFORMAT_ARGB8888);
     if (!surface) {
         std::cerr << "SDL_CreateRGBSurface Error: " << SDL_GetError() << std::endl;
         return;
     }
     
-    // Generate a filename based on the current time
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
     char filename[64];

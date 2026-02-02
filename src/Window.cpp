@@ -2,7 +2,7 @@
 #include <iostream>
 
 Window::Window(const char* title, int x, int y, int width, int height, Uint32 flags)
-    : window(nullptr), renderer(nullptr), isRunning(false) {
+    : window(nullptr), renderer(nullptr), is_running(false) {
     std::cout << "Initializing SDL\n";
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
@@ -27,7 +27,7 @@ Window::Window(const char* title, int x, int y, int width, int height, Uint32 fl
     renderer = new Renderer(window);
 
     std::cout << "Window initialized\n";
-    isRunning = true; // Set to true after successful initialization
+    is_running = true;
 }
 
 Window::~Window() {
@@ -42,68 +42,66 @@ Window::~Window() {
 
 void Window::start() {
     std::cout << "Starting window\n";
-    drawFractal(); // Initial draw
-    mainLoop();    // Enter main event loop
+    draw_fractal();
+    main_loop();
 }
 
-void Window::mainLoop() {
+void Window::main_loop() {
     std::cout << "Starting event loop\n";
-    while (isRunning) {
+    while (is_running) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
-                isRunning = false;
+                is_running = false;
             } else if (event.type == SDL_KEYDOWN) {
                 switch (event.key.keysym.sym) {
                     case SDLK_UP:
                         Parameters::CENTER_Y += 50.0;
-                        break; // Pan up
+                        break;
                     case SDLK_DOWN:
                         Parameters::CENTER_Y -= 50.0;
-                        break; // Pan down
+                        break;
                     case SDLK_LEFT:
-                        Parameters::CENTER_X += 50.0 ;
-                        break; // Pan left
+                        Parameters::CENTER_X += 50.0;
+                        break;
                     case SDLK_RIGHT:
                         Parameters::CENTER_X -= 50.0;
-                        break; // Pan right
+                        break;
                     case SDLK_MINUS:
                         Parameters::ZOOM *= 0.8f;
-                        break; // Zoom out
+                        break;
                     case SDLK_EQUALS:
                         Parameters::ZOOM *= 1.25f;
-                        break; // Zoom in
+                        break;
                     case SDLK_w:
                         Parameters::C_IMAG += 0.01f;
-                        break; // Adjust cImag up
+                        break;
                     case SDLK_s:
                         Parameters::C_IMAG -= 0.01f;
-                        break; // Adjust cImag down
+                        break;
                     case SDLK_a:
                         Parameters::C_REAL -= 0.01f;
-                        break; // Adjust cReal left
+                        break;
                     case SDLK_d:
                         Parameters::C_REAL += 0.01f;
-                        break; // Adjust cReal right
-                    case SDLK_r:
-                        renderer->generateGradient();
-                        break; // Regenerate gradient
-                    case SDLK_f:
-                        renderer->saveScreenshot();
-                        break; // Save screenshot
-                    case SDLK_ESCAPE:
-                        isRunning = false; // Exit on ESC
                         break;
-                    
+                    case SDLK_r:
+                        renderer->generate_gradient();
+                        break;
+                    case SDLK_f:
+                        renderer->save_screenshot();
+                        break;
+                    case SDLK_ESCAPE:
+                        is_running = false;
+                        break;
                 }
-                // Update Renderer scale based on new ZOOM value
-                renderer->setZoom(Parameters::ZOOM);
+                renderer->set_zoom(Parameters::ZOOM);
             }
         }
-        drawFractal(); // Redraw after each event to reflect changes
+        draw_fractal();
     }
     std::cout << "Event loop exited\n";
 }
 
-void Window::drawFractal() {
-    renderer->drawFractal();
+void Window::draw_fractal() {
+    renderer->draw_fractal();
 }
