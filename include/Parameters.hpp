@@ -1,7 +1,7 @@
 #pragma once
 
 namespace Parameters {
-    inline int WIDTH = 800;           // Window width
+    inline int WIDTH = 807;           // Window width
     inline int HEIGHT = 600;          // Window height
     inline float CENTER_X = 400.0f;   // Center x-coordinate (width / 2)
     inline float CENTER_Y = 300.0f;   // Center y-coordinate (height / 2)

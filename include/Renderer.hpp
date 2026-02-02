@@ -1,19 +1,11 @@
 #pragma once
 #include <SDL2/SDL.h>
 #include <xsimd/xsimd.hpp>
-#include <array>
 #include <vector>
 #include <thread>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
 #include <atomic>
+#include <barrier> 
 #include "Parameters.hpp"
-
-struct Task {
-    int start_y;
-    int end_y;
-};
 
 class Renderer {
     SDL_Renderer* renderer;
@@ -26,27 +18,25 @@ class Renderer {
 
     // Thread pool members
     std::vector<std::thread> workers;
-    std::queue<Task> tasks;
-    std::mutex queue_mutex;
-    std::condition_variable condition;
     std::atomic<bool> stop;
-    std::atomic<bool> tasks_available;
-    std::atomic<int> tasks_completed;
+    std::barrier<> sync_barrier; 
 
 public:
     Renderer(SDL_Window* window);
     ~Renderer();
-    void draw_fractal();
     void init();
     void generate_gradient();
     void save_screenshot();
+    void stop_loop();
     void set_zoom(float zoom) { 
         scale_x = 2.0f * 4 / (Parameters::WIDTH * zoom); 
         scale_y = 2.0f * 4 / (Parameters::HEIGHT * zoom); 
     }
+    
+    void render();
 
 private:
-    void worker_thread();
+    void worker_thread(int start_y, int end_y);
     void compute_fractal_chunk(int start_y, int end_y);
     void setup_constants(float& cy, int y, xsimd::simd_type<float>& c_re, xsimd::simd_type<float>& c_im,
                         xsimd::simd_type<float>& four, xsimd::simd_type<float>& two,
