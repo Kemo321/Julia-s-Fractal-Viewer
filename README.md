@@ -147,7 +147,10 @@ namespace Parameters {
 
 * **Worker Threads:**
 * Worker threads run in a continuous loop, waiting on a `std::barrier` for a new frame signal.
-* Once released, each thread computes a specific horizontal slice (chunk) of the fractal and waits at the barrier again for the main thread to complete the rendering cycle.
+* Once released, each thread computes a specific horizontal slice (chunk) of the fractal using `compute_fractal_chunk()`, distributing rows across threads via `y = thread_id; y < Parameters::HEIGHT; y += num_threads`.
+* After computation, threads wait at the barrier again for the main thread to complete the rendering cycle and present the frame before the next iteration begins.
+* The `stop` flag allows graceful shutdown: when set, threads call `arrive_and_drop()` to exit the synchronization and terminate.
+
 
 
 * **std::barrier (C++23):**
