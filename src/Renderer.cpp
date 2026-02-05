@@ -31,7 +31,7 @@ Renderer::Renderer(SDL_Window* window)
     {
         int start_y = i * (Parameters::HEIGHT / num_threads);
         int end_y = (i == num_threads - 1) ? Parameters::HEIGHT : start_y + (Parameters::HEIGHT / num_threads);
-        workers.emplace_back(&Renderer::worker_thread, this, start_y, end_y);
+        workers.emplace_back(&Renderer::worker_thread, this, i, num_threads);
     }
 }
 
@@ -76,7 +76,7 @@ void Renderer::render()
     SDL_RenderPresent(renderer);
 }
 
-void Renderer::worker_thread(int start_y, int end_y)
+void Renderer::worker_thread(int thread_id, int num_threads)
 {
     while (true)
     {
@@ -88,7 +88,11 @@ void Renderer::worker_thread(int start_y, int end_y)
             break;
         }
 
-        compute_fractal_chunk(start_y, end_y);
+        for (int y = thread_id; y < Parameters::HEIGHT; y += num_threads)
+        {
+            compute_fractal_chunk(y, y + 1);
+        }
+
         sync_barrier.arrive_and_wait();
     }
 }
@@ -118,7 +122,7 @@ void Renderer::compute_fractal_chunk(int start_y, int end_y)
 void Renderer::setup_constants(float& cy, int y, xsimd::simd_type<float>& c_re, xsimd::simd_type<float>& c_im,
     xsimd::simd_type<float>& four, xsimd::simd_type<float>& two, xsimd::simd_type<float>& max_iter) const
 {
-    cy = (static_cast<float>(y) - Parameters::CENTER_Y) * scale_y;
+    cy = (static_cast<float>(y) - (Parameters::HEIGHT / 2.0f)) * scale_y + Parameters::POS_Y;
     c_re = xs::broadcast<float>(Parameters::C_REAL);
     c_im = xs::broadcast<float>(Parameters::C_IMAG);
     four = xs::broadcast<float>(Parameters::ESCAPE_RADIUS_SQ);
@@ -140,7 +144,7 @@ void Renderer::compute_simd_chunk(int x, int y, const xsimd::simd_type<float>& c
     }
 
     floatv x_vec = xs::load_aligned(x_coords.data());
-    floatv zx = (x_vec - floatv(Parameters::CENTER_X)) * floatv(scale_x);
+    floatv zx = (x_vec - floatv(Parameters::WIDTH / 2.0f)) * floatv(scale_x) + floatv(Parameters::POS_X);
     floatv zy = xs::broadcast<float>(cy);
 
     floatv iterations = compute_simd_iterations(zx, zy, c_re, c_im, four, max_iter, two);
@@ -186,7 +190,7 @@ xsimd::simd_type<float> Renderer::compute_simd_iterations(
 
 void Renderer::compute_scalar_pixel(int x, int y, float cy)
 {
-    float zx = (static_cast<float>(x) - Parameters::CENTER_X) * scale_x;
+    float zx = (static_cast<float>(x) - Parameters::POS_X - (Parameters::WIDTH / 2.0f)) * scale_x + Parameters::POS_X;
     float zy = cy;
     const float two = Parameters::TWO_MULTIPLIER;
     int iter = 0;

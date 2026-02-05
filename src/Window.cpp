@@ -54,27 +54,27 @@ void Window::main_loop()
                 switch (event.key.keysym.sym)
                 {
                 case SDLK_r:
-                    Parameters::CENTER_X = 400.0f;
-                    Parameters::CENTER_Y = 300.0f;
+                    Parameters::POS_X = 0.0f;
+                    Parameters::POS_Y = 0.0f;
                     Parameters::ZOOM = 1.0f;
                     Parameters::C_REAL = -0.8f;
                     Parameters::C_IMAG = 0.156f;
                     params_changed = true;
                     break;
                 case SDLK_UP:
-                    Parameters::CENTER_Y += 50.0;
+                    Parameters::POS_Y -= 0.1f / Parameters::ZOOM;
                     params_changed = true;
                     break;
                 case SDLK_DOWN:
-                    Parameters::CENTER_Y -= 50.0;
+                    Parameters::POS_Y += 0.1f / Parameters::ZOOM;
                     params_changed = true;
                     break;
                 case SDLK_LEFT:
-                    Parameters::CENTER_X += 50.0;
+                    Parameters::POS_X -= 0.1f / Parameters::ZOOM;
                     params_changed = true;
                     break;
                 case SDLK_RIGHT:
-                    Parameters::CENTER_X -= 50.0;
+                    Parameters::POS_X += 0.1f / Parameters::ZOOM;
                     params_changed = true;
                     break;
                 case SDLK_MINUS:
